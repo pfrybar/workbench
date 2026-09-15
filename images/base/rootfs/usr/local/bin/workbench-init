@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Prepares $HOME for a workbench image. The entrypoint runs it on every start,
+# and it's safe to run again by hand.
+#
+#   WORKBENCH_INSTALL_AGENTS=0         don't install Claude Code and pi
+#   WORKBENCH_ASDF_PLUGINS="a b ..."   asdf plugins to add (empty for none)
+set -uo pipefail
+
+state_dir=$HOME/.cache/workbench
+
+# Copy image defaults that aren't in $HOME yet. A volume only gets them on its
+# first mount, and this never overwrites anything.
+rsync -a --ignore-existing /etc/skel/ "$HOME"/
+mkdir -p "$HOME/.local/bin" "$state_dir"
+
+install_claude() {
+  [[ -x $HOME/.local/bin/claude ]] && return 0
+  echo "Installing Claude Code"
+  curl -fsSL https://claude.ai/install.sh | bash
+}
+
+install_pi() {
+  local prefix=$HOME/.local/share/pi
+  [[ -e $prefix/bin/pi ]] && return 0
+  echo "Installing pi"
+  # npm's launcher looks up `node` on PATH, so put the image's Node first.
+  PATH=/opt/workbench/node/bin:$PATH npm install --global --prefix "$prefix" \
+    --ignore-scripts --no-fund --no-audit @earendil-works/pi-coding-agent
+}
+
+add_asdf_plugins() {
+  local plugin installed
+  installed=$(asdf plugin list 2>/dev/null)
+  for plugin in ${WORKBENCH_ASDF_PLUGINS-python golang nodejs java}; do
+    grep -qx "$plugin" <<<"$installed" && continue
+    echo "Adding asdf plugin $plugin"
+    asdf plugin add "$plugin" || return 1
+  done
+}
+
+# These need the network, so they run in the background and the container
+# (and Coder's agent) can start right away.
+rm -f "$state_dir/setup-status"
+{
+  echo "== $(date -Is) =="
+  status=ok
+  if [[ ${WORKBENCH_INSTALL_AGENTS:-1} == 1 ]]; then
+    install_claude || status=failed
+    install_pi || status=failed
+  fi
+  add_asdf_plugins || status=failed
+  echo "setup: $status"
+  echo "$status" >"$state_dir/setup-status"
+} >>"$state_dir/setup.log" 2>&1 &

@@ -1,0 +1,15 @@
+#!/bin/sh
+# Runs pi (installed in $HOME by workbench-init) on the image's own Node.js, so
+# the `node` asdf picks for the current project can't break it.
+entry=$(readlink -f "$HOME/.local/share/pi/bin/pi" 2>/dev/null)
+if [ ! -f "$entry" ]; then
+  echo "pi isn't installed yet: workbench-init installs it on first start (see ~/.cache/workbench/setup.log)" >&2
+  exit 127
+fi
+# pi runs `npm` to update itself and to manage packages, so those commands get
+# the image's npm. Everything else keeps PATH as it is, so commands pi runs for
+# you still use the project's own node.
+case "${1:-}" in
+  update | install | remove | uninstall) PATH=/opt/workbench/node/bin:$PATH && export PATH ;;
+esac
+exec /opt/workbench/node/bin/node "$entry" "$@"

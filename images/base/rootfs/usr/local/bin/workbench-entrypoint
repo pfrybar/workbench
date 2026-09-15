@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Entrypoint for workbench images: starts Docker when the container is allowed
+# to run it, prepares $HOME, then runs the given command.
+#
+#   WORKBENCH_START_DOCKERD=0   don't start dockerd
+set -uo pipefail
+
+log() { printf 'workbench: %s\n' "$*" >&2; }
+
+start_dockerd() {
+  [[ ${WORKBENCH_START_DOCKERD:-1} == 1 ]] || return 0
+  command -v dockerd >/dev/null || return 0
+  # A daemon is already reachable, or the host's socket is mounted in.
+  if docker info >/dev/null 2>&1 || mountpoint -q /var/run/docker.sock; then
+    return 0
+  fi
+  if ! sudo -n /etc/init.d/docker start >/dev/null 2>&1; then
+    log "couldn't start dockerd"
+    return 0
+  fi
+  # Wait until it answers, or stop waiting once it has exited.
+  for _ in {1..60}; do
+    docker info >/dev/null 2>&1 && return 0
+    pgrep -x dockerd >/dev/null || break
+    sleep 0.5
+  done
+  log "dockerd isn't running (Docker-in-Docker needs sysbox or --privileged); see /var/log/docker.log"
+}
+
+start_dockerd
+workbench-init
+
+# No command given: a login shell when attached to a terminal, otherwise stay
+# up so you can `docker exec` in.
+if [[ $# -eq 0 ]]; then
+  if [[ -t 0 ]]; then set -- zsh -l; else set -- sleep infinity; fi
+fi
+exec "$@"
