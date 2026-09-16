@@ -50,6 +50,19 @@ check "home is seeded, no zsh new-user wizard" run bash -c '
 
 check "~/.zprezto points at the image's prezto" run zsh -c '
   [[ -L ~/.zprezto ]] && source ~/.zprezto/init.zsh'
+check "dotfiles: clone, install.sh, then post-install.sh" run bash -c '
+  wait_for_setup() {
+    for _ in {1..60}; do [[ -f ~/.cache/workbench/setup-status ]] && return; sleep 0.5; done
+  }
+  wait_for_setup
+  git init -q /tmp/dotfiles && cd /tmp/dotfiles &&
+    printf "#!/bin/sh\ntouch ~/.installed\n" >install.sh &&
+    printf "#!/bin/sh\ntouch ~/.post-installed\n" >post-install.sh &&
+    chmod +x install.sh post-install.sh && git add . &&
+    git -c user.name=test -c user.email=test@example.invalid commit -qm fixture || exit 1
+  cd ~ && WORKBENCH_DOTFILES_REPO=/tmp/dotfiles workbench-init >/dev/null && wait_for_setup
+  [[ -d ~/.dotfiles/.git && -f ~/.installed && -f ~/.post-installed &&
+     $(cat ~/.cache/workbench/setup-status) == ok ]]'
 
 if [[ ${1:-} == --network ]]; then
   check "dockerd starts under --privileged" docker run --rm --privileged -v /var/lib/docker \

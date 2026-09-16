@@ -40,28 +40,33 @@ Without sysbox (Docker Desktop, OrbStack), Docker inside the container needs `--
 docker run -it --rm --privileged -v workbench-home:/home/dev -v workbench-docker:/var/lib/docker workbench:base
 ```
 
-Or share the host's Docker instead by adding `-v /var/run/docker.sock:/var/run/docker.sock`.
+Or share the host's Docker instead by adding `-v /var/run/docker.sock:/var/run/docker.sock`. To apply your dotfiles, add `-e WORKBENCH_DOTFILES_REPO=https://github.com/you/dotfiles`.
 
 ## Use with Coder
 
-`coder/docker/main.tf` is a Docker template for these images. It runs workspaces under sysbox and applies your dotfiles with Coder's dotfiles module. The image has to exist on the Coder host's Docker, so build it there. Pass your dotfiles repo when pushing the template:
+`coder/docker/main.tf` is a Docker template for these images. It runs workspaces under sysbox, passes your dotfiles repo to the image, and shows the image's startup log in the dashboard ("Workbench setup"), holding logins until it's finished. The image has to exist on the Coder host's Docker, so build it there. Pass your dotfiles repo when pushing the template:
 
 ```sh
-coder templates push workbench -d coder/docker --variable dotfiles_uri=git@github.com:you/dotfiles.git
+coder templates push workbench -d coder/docker --variable dotfiles_uri=https://github.com/you/dotfiles
 ```
 
 ## Dotfiles
 
 The image ships prezto and links `~/.zprezto` to it, since dotfiles normally expect prezto there. Swap the link for your own clone if you'd rather manage it yourself; otherwise the image's copy updates when you rebuild.
 
-The Coder template also installs your Emacs packages on first start: once your dotfiles are applied, the dotfiles module's `post_clone_script` runs Emacs's package install.
+Set `WORKBENCH_DOTFILES_REPO` and the image applies your dotfiles on every start, before your first shell. It clones the repo to `~/.dotfiles`, or updates it with `git pull --ff-only` unless you have local changes, then runs its `install.sh` from inside the clone.
+
+If the repo also has an executable `post-install.sh`, it runs afterwards in the background. That's the place for slower steps, like installing Emacs packages. It runs on every start, so make it safe to repeat.
+
+The clone can't prompt for credentials, so a private repo needs them available inside the container when it starts.
 
 ## What happens on start
 
 1. The entrypoint starts dockerd, unless a Docker socket is already mounted in or the container isn't allowed to run it.
-2. Files from `/etc/skel` that aren't in `$HOME` yet are copied in, since a volume only gets them on its first mount.
-3. In the background, Claude Code and pi are installed if missing, and asdf plugins are added. The log is `~/.cache/workbench/setup.log`.
-4. Your command runs. With no command, you get a login shell if a terminal is attached; otherwise the container stays up for `docker exec`.
+2. If `WORKBENCH_DOTFILES_REPO` is set, your dotfiles are cloned or updated, and their `install.sh` runs.
+3. Files from `/etc/skel` that aren't in `$HOME` yet are copied in, since a volume only gets them on its first mount.
+4. In the background: your dotfiles' `post-install.sh`, then Claude Code and pi if missing, then asdf plugins. Everything is logged to `~/.cache/workbench/setup.log`, and `~/.cache/workbench/setup-status` says `ok` or `failed` when it's done.
+5. Your command runs. With no command, you get a login shell if a terminal is attached; otherwise the container stays up for `docker exec`.
 
 ## Where things live
 
@@ -78,6 +83,7 @@ The Coder template also installs your Emacs packages on first start: once your d
 
 | Variable | Default | Effect |
 |---|---|---|
+| `WORKBENCH_DOTFILES_REPO` | none | Dotfiles repo to clone and install on every start |
 | `WORKBENCH_START_DOCKERD` | `1` | `0` skips starting dockerd |
 | `WORKBENCH_INSTALL_AGENTS` | `1` | `0` skips installing Claude Code and pi |
 | `WORKBENCH_ASDF_PLUGINS` | `python golang nodejs java` | asdf plugins to add; empty for none |

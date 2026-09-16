@@ -2,16 +2,53 @@
 # Prepares $HOME for a workbench image. The entrypoint runs it on every start,
 # and it's safe to run again by hand.
 #
+#   WORKBENCH_DOTFILES_REPO=<git url>  your dotfiles: cloned to ~/.dotfiles on first
+#                                      start and pulled on later ones. Its install.sh
+#                                      runs right away, its post-install.sh (if it has
+#                                      one) in the background.
 #   WORKBENCH_INSTALL_AGENTS=0         don't install Claude Code and pi
 #   WORKBENCH_ASDF_PLUGINS="a b ..."   asdf plugins to add (empty for none)
+#
+# Everything is logged to ~/.cache/workbench/setup.log. Once the background part
+# is done, ~/.cache/workbench/setup-status says "ok" or "failed".
 set -uo pipefail
 
 state_dir=$HOME/.cache/workbench
+log=$state_dir/setup.log
+dotfiles_dir=$HOME/.dotfiles
 
-# Copy image defaults that aren't in $HOME yet. A volume only gets them on its
-# first mount, and this never overwrites anything.
-rsync -a --ignore-existing /etc/skel/ "$HOME"/
-mkdir -p "$HOME/.local/bin" "$state_dir"
+apply_dotfiles() {
+  local repo=${WORKBENCH_DOTFILES_REPO:-}
+  [[ -n $repo ]] || return 0
+  # Fail rather than wait for a password if the repo needs credentials.
+  export GIT_TERMINAL_PROMPT=0
+
+  if [[ ! -e $dotfiles_dir ]]; then
+    echo "Cloning $repo into $dotfiles_dir"
+    timeout 120 git clone --quiet "$repo" "$dotfiles_dir" || return 1
+  elif [[ $(git -C "$dotfiles_dir" remote get-url origin 2>/dev/null) != "$repo" ]]; then
+    echo "$dotfiles_dir isn't a clone of $repo, so it's left alone"
+    return 1
+  elif [[ -n $(git -C "$dotfiles_dir" status --porcelain) ]]; then
+    echo "$dotfiles_dir has local changes, so it isn't updated"
+  else
+    timeout 60 git -C "$dotfiles_dir" pull --quiet --ff-only ||
+      echo "Couldn't update $dotfiles_dir; using it as it is"
+  fi
+
+  if [[ ! -x $dotfiles_dir/install.sh ]]; then
+    echo "$dotfiles_dir has no executable install.sh"
+    return 1
+  fi
+  echo "Running install.sh"
+  (cd "$dotfiles_dir" && ./install.sh)
+}
+
+run_dotfiles_post_install() {
+  [[ -n ${WORKBENCH_DOTFILES_REPO:-} && -x $dotfiles_dir/post-install.sh ]] || return 0
+  echo "Running post-install.sh"
+  (cd "$dotfiles_dir" && ./post-install.sh)
+}
 
 install_claude() {
   [[ -x $HOME/.local/bin/claude ]] && return 0
@@ -38,12 +75,27 @@ add_asdf_plugins() {
   done
 }
 
-# These need the network, so they run in the background and the container
-# (and Coder's agent) can start right away.
+mkdir -p "$HOME/.local/bin" "$state_dir"
 rm -f "$state_dir/setup-status"
+echo "== $(date -Is) ==" >>"$log"
+
+# Dotfiles first, in the foreground, so the first shell already has them.
+apply_dotfiles 2>&1 | tee -a "$log"
+dotfiles_status=${PIPESTATUS[0]}
+
+# Then image defaults that aren't in $HOME yet. A volume only gets them on its
+# first mount, and this never overwrites anything.
+rsync -a --ignore-existing /etc/skel/ "$HOME"/
+
+# The rest needs the network, so it runs in the background and the container
+# (and Coder's agent) can start right away.
 {
-  echo "== $(date -Is) =="
   status=ok
+  if ((dotfiles_status == 0)); then
+    run_dotfiles_post_install || status=failed
+  else
+    status=failed
+  fi
   if [[ ${WORKBENCH_INSTALL_AGENTS:-1} == 1 ]]; then
     install_claude || status=failed
     install_pi || status=failed
@@ -51,4 +103,4 @@ rm -f "$state_dir/setup-status"
   add_asdf_plugins || status=failed
   echo "setup: $status"
   echo "$status" >"$state_dir/setup-status"
-} >>"$state_dir/setup.log" 2>&1 &
+} >>"$log" 2>&1 &

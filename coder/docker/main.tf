@@ -33,7 +33,7 @@ variable "image" {
 
 variable "dotfiles_uri" {
   default     = "https://github.com/pfrybar/dotfiles"
-  description = "Default dotfiles repository offered to new workspaces, e.g. git@github.com:you/dotfiles.git"
+  description = "Dotfiles repository the image applies on every start, e.g. https://github.com/you/dotfiles. Empty for none."
   type        = string
 }
 
@@ -143,22 +143,21 @@ module "git-clone" {
   url      = data.coder_parameter.git_repo.value
 }
 
-# Clones your dotfiles repo and runs its install script on every start.
-# See https://registry.coder.com/modules/coder/dotfiles
-module "dotfiles" {
-  count                = data.coder_workspace.me.start_count
-  source               = "registry.coder.com/coder/dotfiles/coder"
-  version              = "~> 1.4"
-  agent_id             = coder_agent.main.id
-  default_dotfiles_uri = var.dotfiles_uri
-
-  # Runs after the dotfiles are applied, on every start.
-  post_clone_script = <<-EOT
-    # Install the Emacs packages the dotfiles select, once per workspace.
-    if [ -f "$HOME/.emacs" ] && [ ! -d "$HOME/.emacs.d/elpa" ]; then
-      emacs --batch --eval '(package-initialize)' --load "$HOME/.emacs" \
-        --eval '(package-refresh-contents)' --eval '(package-install-selected-packages t)'
-    fi
+# Shows the image's startup log (dotfiles, Claude Code, pi, asdf plugins) in the
+# dashboard, and holds logins until it's finished.
+resource "coder_script" "workbench_setup" {
+  agent_id           = coder_agent.main.id
+  display_name       = "Workbench setup"
+  run_on_start       = true
+  start_blocks_login = true
+  timeout            = 600
+  script             = <<-EOT
+    # workbench-init writes this once its background part is done.
+    state=$HOME/.cache/workbench/setup-status
+    while [ ! -f "$state" ]; do sleep 1; done
+    # Print this start's section of the log.
+    awk '/^== /{run=""} {run=run $0 "\n"} END{printf "%s", run}' "$HOME/.cache/workbench/setup.log"
+    [ "$(cat "$state")" = ok ]
   EOT
 }
 
@@ -212,7 +211,10 @@ resource "docker_container" "workspace" {
   # Docker) runs first and then starts the agent.
   # Use the docker gateway if the access URL is 127.0.0.1
   command = ["sh", "-c", replace(coder_agent.main.init_script, "/localhost|127\\.0\\.0\\.1/", "host.docker.internal")]
-  env     = ["CODER_AGENT_TOKEN=${coder_agent.main.token}"]
+  env = [
+    "CODER_AGENT_TOKEN=${coder_agent.main.token}",
+    "WORKBENCH_DOTFILES_REPO=${var.dotfiles_uri}",
+  ]
   runtime = "sysbox-runc"
   host {
     host = "host.docker.internal"
