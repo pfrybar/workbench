@@ -52,17 +52,6 @@ resource "coder_agent" "main" {
   arch = data.coder_provisioner.me.arch
   os   = "linux"
 
-  # These environment variables allow you to make Git commits right away after creating a
-  # workspace. Note that they take precedence over configuration defined in ~/.gitconfig!
-  # You can remove this block if you'd prefer to configure Git manually or using
-  # dotfiles. (see docs/dotfiles.md)
-  env = {
-    GIT_AUTHOR_NAME     = coalesce(data.coder_workspace_owner.me.full_name, data.coder_workspace_owner.me.name)
-    GIT_AUTHOR_EMAIL    = "pfrybar@frymail.net"
-    GIT_COMMITTER_NAME  = coalesce(data.coder_workspace_owner.me.full_name, data.coder_workspace_owner.me.name)
-    GIT_COMMITTER_EMAIL = "pfrybar@frymail.net"
-  }
-
   # The following metadata blocks are optional. They are used to display
   # information about your workspace in the dashboard. You can remove them
   # if you don't want to display any information.
@@ -136,8 +125,10 @@ data "coder_parameter" "git_repo" {
   default      = ""
 }
 
+# See https://registry.coder.com/modules/coder/git-clone
 module "git-clone" {
-  source   = "registry.coder.com/modules/git-clone/coder"
+  count    = data.coder_workspace.me.start_count
+  source   = "registry.coder.com/coder/git-clone/coder"
   version  = "~> 2.0"
   agent_id = coder_agent.main.id
   url      = data.coder_parameter.git_repo.value
