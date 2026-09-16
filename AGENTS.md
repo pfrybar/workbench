@@ -8,7 +8,7 @@ Docker images for development environments. They're built for Coder workspaces b
 - `images/base/rootfs/`: files copied into the image as-is, including the startup scripts in `usr/local/bin/`.
 - `docker-bake.hcl`: build definitions for `docker buildx bake`.
 - `tests/base.sh`: smoke tests for the built image.
-- `coder/docker/main.tf`: a Coder template for the images.
+- `coder/docker/`: a Coder template for the images (`main.tf`), and its `README.md`, which Coder shows alongside the template. Keep the README in step with `main.tf`, and use full URLs in it, since relative links don't work in Coder's dashboard.
 
 ## Principles
 

@@ -55,7 +55,7 @@ Or share the host's Docker instead by adding `-v /var/run/docker.sock:/var/run/d
 
 ## Use with Coder
 
-`coder/docker/main.tf` is a Docker template for these images. It runs workspaces under sysbox, passes your dotfiles repo to the image, and shows the image's startup log in the dashboard ("Workbench setup"), holding logins until it's finished. It uses `ghcr.io/pfrybar/workbench:base`, and a workspace start pulls a new build whenever that tag has moved. The package must be public for this, unless you add `registry_auth` for `ghcr.io` to the template's Docker provider. Pass your dotfiles repo when pushing the template:
+`coder/docker/main.tf` is a Docker template for these images. It runs workspaces under sysbox, passes your dotfiles repo to the image, and shows the image's startup log in the dashboard ("Workbench setup"), holding logins until it's finished. It uses `ghcr.io/pfrybar/workbench:base`, and a workspace start pulls a new build whenever that tag has moved. The package must be public for this, unless you add `registry_auth` for `ghcr.io` to the template's Docker provider. [`coder/docker/README.md`](coder/docker/README.md) covers its prerequisites, variables and how it works. Pass your dotfiles repo when pushing the template:
 
 ```sh
 coder templates push workbench -d coder/docker --variable dotfiles_uri=https://github.com/you/dotfiles
