@@ -20,7 +20,8 @@ permissions:
   contents: read
 
 env:
-  IMAGE: ghcr.io/${{ github.repository }}
+  # Not IMAGE: every step inherits this, and tests/base.sh reads IMAGE.
+  REGISTRY_IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
   check:
@@ -77,7 +78,7 @@ jobs:
       - uses: docker/metadata-action@v6
         id: meta
         with:
-          images: ${{ env.IMAGE }}
+          images: ${{ env.REGISTRY_IMAGE }}
 
       # Loaded into the runner's Docker under the name tests/base.sh expects.
       - name: Build
@@ -112,7 +113,7 @@ jobs:
           context: images/base
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ matrix.platform }}
 
       - name: Hand the digest to the manifest job
@@ -159,7 +160,7 @@ jobs:
       - uses: docker/metadata-action@v6
         id: meta
         with:
-          images: ${{ env.IMAGE }}
+          images: ${{ env.REGISTRY_IMAGE }}
           tags: |
             type=raw,value=base,enable={{is_default_branch}}
             type=sha,prefix=base-sha-
@@ -176,11 +177,11 @@ jobs:
             [ -n "$tag" ] && args+=(-t "$tag")
           done <<< "$TAGS"
           for digest in *; do
-            args+=("$IMAGE@sha256:$digest")
+            args+=("$REGISTRY_IMAGE@sha256:$digest")
           done
           docker buildx imagetools create "${args[@]}"
 
       - name: Show what was published
         env:
           VERSION: ${{ steps.meta.outputs.version }}
-        run: docker buildx imagetools inspect "$IMAGE:$VERSION"
+        run: docker buildx imagetools inspect "$REGISTRY_IMAGE:$VERSION"
