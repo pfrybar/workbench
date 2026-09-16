@@ -22,6 +22,7 @@ Docker images for development environments. They're built for Coder workspaces b
 ## Coder template
 
 - The container sets `command`, not `entrypoint`, so the image's entrypoint runs before Coder's agent.
+- The registry lookup and pull happen only while a workspace starts (`count = start_count`), so stopping a workspace never depends on the registry.
 - Settings the image reads at start go in the container's `env`. The agent's `env` only reaches agent sessions and scripts.
 - `coder_script` bodies run under the user's shell, which is zsh. Keep them POSIX `sh` and avoid names zsh reserves, such as `status`.
 - After editing, run `terraform fmt` and `terraform validate`. Neither checks the shell inside scripts, so test that separately.

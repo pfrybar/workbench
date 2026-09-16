@@ -26,8 +26,8 @@ variable "cert_path" {
 }
 
 variable "image" {
-  default     = "workbench:base"
-  description = "Workspace image. It must already exist on the Docker host (build it there with `docker buildx bake`)."
+  default     = "ghcr.io/pfrybar/workbench:base"
+  description = "Workspace image in a registry. A workspace start pulls a new build whenever the tag has moved."
   type        = string
 }
 
@@ -164,6 +164,22 @@ module "code-server" {
   order    = 1
 }
 
+# Looks up the tag's current digest when a workspace starts, so a new build of
+# the tag gets pulled. Only on start: stopping a workspace doesn't need the
+# registry.
+data "docker_registry_image" "workbench" {
+  count = data.coder_workspace.me.start_count
+  name  = var.image
+}
+
+resource "docker_image" "workbench" {
+  count         = data.coder_workspace.me.start_count
+  name          = data.docker_registry_image.workbench[0].name
+  pull_triggers = [data.docker_registry_image.workbench[0].sha256_digest]
+  # Other workspaces may still be running the previous build.
+  keep_locally = true
+}
+
 resource "docker_volume" "home_volume" {
   name = "coder-${data.coder_workspace.me.id}-home"
   # Protect the volume from being deleted due to changes in attributes.
@@ -193,7 +209,7 @@ resource "docker_volume" "home_volume" {
 
 resource "docker_container" "workspace" {
   count = data.coder_workspace.me.start_count
-  image = var.image
+  image = docker_image.workbench[0].image_id
   # Uses lower() to avoid Docker restriction on container names.
   name = "coder-${data.coder_workspace_owner.me.name}-${lower(data.coder_workspace.me.name)}"
   # Hostname makes the shell more user friendly: dev@my-workspace:~$
