@@ -32,7 +32,7 @@ variable "image" {
 }
 
 variable "dotfiles_uri" {
-  default     = ""
+  default     = "https://github.com/pfrybar/dotfiles"
   description = "Default dotfiles repository offered to new workspaces, e.g. git@github.com:you/dotfiles.git"
   type        = string
 }
@@ -151,6 +151,15 @@ module "dotfiles" {
   version              = "~> 1.4"
   agent_id             = coder_agent.main.id
   default_dotfiles_uri = var.dotfiles_uri
+
+  # Runs after the dotfiles are applied, on every start.
+  post_clone_script = <<-EOT
+    # Install the Emacs packages the dotfiles select, once per workspace.
+    if [ -f "$HOME/.emacs" ] && [ ! -d "$HOME/.emacs.d/elpa" ]; then
+      emacs --batch --eval '(package-initialize)' --load "$HOME/.emacs" \
+        --eval '(package-refresh-contents)' --eval '(package-install-selected-packages t)'
+    fi
+  EOT
 }
 
 # See https://registry.coder.com/modules/coder/code-server

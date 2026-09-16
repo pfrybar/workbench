@@ -48,6 +48,9 @@ check "pi's Node is >= 22.19" run /opt/workbench/node/bin/node -e '
 check "home is seeded, no zsh new-user wizard" run bash -c '
   [[ -f ~/.zshrc ]] && ! zsh -i -c exit </dev/null 2>&1 | grep -q "new users"'
 
+check "~/.zprezto points at the image's prezto" run zsh -c '
+  [[ -L ~/.zprezto ]] && source ~/.zprezto/init.zsh'
+
 if [[ ${1:-} == --network ]]; then
   check "dockerd starts under --privileged" docker run --rm --privileged -v /var/lib/docker \
     -e WORKBENCH_INSTALL_AGENTS=0 -e WORKBENCH_ASDF_PLUGINS= "$IMAGE" \

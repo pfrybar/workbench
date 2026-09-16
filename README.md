@@ -50,6 +50,12 @@ Or share the host's Docker instead by adding `-v /var/run/docker.sock:/var/run/d
 coder templates push workbench -d coder/docker --variable dotfiles_uri=git@github.com:you/dotfiles.git
 ```
 
+## Dotfiles
+
+The image ships prezto and links `~/.zprezto` to it, since dotfiles normally expect prezto there. Swap the link for your own clone if you'd rather manage it yourself; otherwise the image's copy updates when you rebuild.
+
+The Coder template also installs your Emacs packages on first start: once your dotfiles are applied, the dotfiles module's `post_clone_script` runs Emacs's package install.
+
 ## What happens on start
 
 1. The entrypoint starts dockerd, unless a Docker socket is already mounted in or the container isn't allowed to run it.
