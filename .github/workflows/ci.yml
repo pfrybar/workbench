@@ -1,0 +1,186 @@
+# What a green tick means: the image builds for amd64 and arm64, and each build
+# passes tests/base.sh --network on a runner of its own architecture. Only then
+# is anything published, and never from a pull request.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # A superseded run proves nothing about the commit that replaced it.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Nothing here reads or writes anything else. Jobs that publish ask for
+# `packages: write` themselves rather than widening this.
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  check:
+    name: Lint scripts and the Coder template
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: shellcheck
+        run: shellcheck images/base/rootfs/usr/local/bin/* tests/base.sh
+
+      - uses: hashicorp/setup-terraform@v4
+
+      # validate needs the providers and modules, which init downloads. There is
+      # no state involved, so no backend.
+      - name: Terraform fmt and validate
+        working-directory: coder/docker
+        run: |
+          terraform fmt -check
+          terraform init -backend=false -input=false
+          terraform validate
+
+  # One build per architecture, on a runner of that architecture: emulating
+  # arm64 with QEMU would take several times as long. Each leg tests the image
+  # it built, then pushes it untagged, named only by its digest. `manifest` is
+  # what gives the two builds a name.
+  image:
+    name: Image (${{ matrix.platform }})
+    needs: check
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+
+      # `linux/amd64` can't name an artifact; `linux-amd64` can.
+      - name: Name this leg
+        run: echo "PLATFORM_PAIR=${PLATFORM//\//-}" >> "$GITHUB_ENV"
+        env:
+          PLATFORM: ${{ matrix.platform }}
+
+      # Labels only; the tags are decided once, in `manifest`. The labels record
+      # which commit an image came from and link the GHCR package to this repo.
+      - uses: docker/metadata-action@v6
+        id: meta
+        with:
+          images: ${{ env.IMAGE }}
+
+      # Loaded into the runner's Docker under the name tests/base.sh expects.
+      - name: Build
+        uses: docker/build-push-action@v7
+        with:
+          context: images/base
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          tags: workbench:base
+          load: true
+          cache-from: type=gha,scope=${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
+
+      - name: Test
+        run: tests/base.sh --network
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The same build as above, so every layer comes from its cache, pushed by
+      # digest this time.
+      - name: Push
+        id: push
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v7
+        with:
+          context: images/base
+          platforms: ${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.platform }}
+
+      - name: Hand the digest to the manifest job
+        if: github.event_name != 'pull_request'
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      - uses: actions/upload-artifact@v7
+        if: github.event_name != 'pull_request'
+        with:
+          name: digests-${{ env.PLATFORM_PAIR }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # The tags live here, applied once to a manifest list covering both builds, so
+  # a tag can never point at one architecture's build without the other's.
+  #
+  #   base               the newest build of main
+  #   base-sha-<commit>  the build of one commit, to pin or roll back to
+  manifest:
+    name: Tag and publish
+    needs: image
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v6
+        id: meta
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=base,enable={{is_default_branch}}
+            type=sha,prefix=base-sha-
+          flavor: |
+            latest=false
+
+      - name: Create the manifest list
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          args=()
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && args+=(-t "$tag")
+          done <<< "$TAGS"
+          for digest in *; do
+            args+=("$IMAGE@sha256:$digest")
+          done
+          docker buildx imagetools create "${args[@]}"
+
+      - name: Show what was published
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: docker buildx imagetools inspect "$IMAGE:$VERSION"

@@ -38,6 +38,8 @@ tests/base.sh --network   # also Docker-in-Docker and the first-start installs
 
 Add a check to `tests/base.sh` for new behavior.
 
+CI (`.github/workflows/ci.yml`) runs shellcheck on the scripts, `terraform fmt -check` and `terraform validate` on the template, and `tests/base.sh --network` on native amd64 and arm64 runners. Only builds that pass are published, and only from `main`.
+
 ## Style
 
 - Shell scripts use 2-space indentation and start with a comment saying what the script does.

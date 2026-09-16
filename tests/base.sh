@@ -3,6 +3,10 @@
 #
 #   tests/base.sh             quick checks, no network needed
 #   tests/base.sh --network   also Docker-in-Docker and the first-start installs
+#
+# The checks hand their commands to bash -c in single quotes on purpose: they
+# expand inside the container, not here.
+# shellcheck disable=SC2016
 set -uo pipefail
 
 IMAGE=${IMAGE:-workbench:base}
@@ -48,7 +52,7 @@ check "pi's Node is >= 22.19" run /opt/workbench/node/bin/node -e '
 check "home is seeded, no zsh new-user wizard" run bash -c '
   [[ -f ~/.zshrc ]] && ! zsh -i -c exit </dev/null 2>&1 | grep -q "new users"'
 
-check "~/.zprezto points at the image's prezto" run zsh -c '
+check ".zprezto in home links to the image's prezto" run zsh -c '
   [[ -L ~/.zprezto ]] && source ~/.zprezto/init.zsh'
 check "dotfiles: clone, install.sh, then post-install.sh" run bash -c '
   wait_for_setup() {

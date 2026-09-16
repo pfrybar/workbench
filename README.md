@@ -26,6 +26,17 @@ tests/base.sh             # quick checks, no network needed
 tests/base.sh --network   # also Docker-in-Docker and the first-start installs
 ```
 
+## Published images
+
+GitHub Actions (`.github/workflows/ci.yml`) lints the scripts and the Coder template, then builds the image on an amd64 runner and an arm64 runner and runs `tests/base.sh --network` on each. Pull requests stop there. Pushes to `main` also publish both builds to GitHub's container registry as one multi-architecture image:
+
+| Tag | Points at |
+|---|---|
+| `ghcr.io/pfrybar/workbench:base` | the newest build of `main` |
+| `ghcr.io/pfrybar/workbench:base-sha-<commit>` | the build of one commit, to pin or roll back to |
+
+GHCR makes a new package private. Make it public in the package's settings, or log the Docker host in to `ghcr.io`, before pulling it.
+
 ## Run with Docker
 
 Mount a volume at `/home/dev` so your home survives the container. With [sysbox](https://github.com/nestybox/sysbox) on the host:
