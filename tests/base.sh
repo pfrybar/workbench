@@ -72,12 +72,12 @@ if [[ ${1:-} == --network ]]; then
   check "dockerd starts under --privileged" docker run --rm --privileged -v /var/lib/docker \
     -e WORKBENCH_INSTALL_AGENTS=0 -e WORKBENCH_ASDF_PLUGINS= "$IMAGE" \
     docker info --format '{{.ServerVersion}}'
-  check "first start installs Claude Code, pi and asdf plugins; pi updates itself" \
+  check "first start installs Claude Code, Codex, pi and asdf plugins; pi updates itself" \
     docker run --rm -e WORKBENCH_START_DOCKERD=0 "$IMAGE" bash -c '
       for _ in {1..300}; do [[ -f ~/.cache/workbench/setup-status ]] && break; sleep 1; done
       cat ~/.cache/workbench/setup.log
       [[ $(cat ~/.cache/workbench/setup-status) == ok ]] || exit 1
-      claude --version && pi --version && asdf plugin list || exit 1
+      claude --version && codex --version && pi --version && asdf plugin list || exit 1
       # Neither pi nor `pi update` may depend on whichever node comes first on PATH.
       printf "#!/bin/sh\nexit 1\n" >~/.local/bin/node && chmod +x ~/.local/bin/node
       pi --version && pi update --self --force && pi --version'

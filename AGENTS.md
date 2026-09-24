@@ -15,7 +15,7 @@ Docker images for development environments. They're built for Coder workspaces b
 - **Tools, not personal settings.** Anyone should be able to use the image. Personal configuration comes from the dotfiles repo in `WORKBENCH_DOTFILES_REPO`.
 - **Keep it lean.** Don't add packages or tools unless the maintainer asks for them.
 - **`$HOME` is a persistent volume.** Files the image puts in `/home/dev` only reach a volume on its first mount. Put defaults in `/etc/skel`; `workbench-init` copies in any that are missing on every start.
-- **Anything that updates itself lives in `$HOME`.** Coder recreates the container on every start, so anything outside `$HOME` resets to the image. That's why `workbench-init` installs Claude Code, pi and asdf plugins at start.
+- **Anything that updates itself lives in `$HOME`.** Coder recreates the container on every start, so anything outside `$HOME` resets to the image. That's why `workbench-init` installs Claude Code, Codex, pi and asdf plugins at start.
 - **Startup never breaks the container.** The entrypoint and `workbench-init` run on every start. Keep them idempotent, don't use `set -e`, and put slow or network work in the background, logged to `~/.cache/workbench/setup.log`.
 - **amd64 and arm64.** Use `TARGETARCH` for architecture-specific downloads, and update a download's version together with its checksums for both architectures.
 

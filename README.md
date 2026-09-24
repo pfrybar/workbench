@@ -12,7 +12,7 @@ The images contain tools, not personal settings. Shell, editor and git configura
 - zsh with [prezto](https://github.com/sorin-ionescu/prezto), tmux, Emacs (terminal), atuin and diff-so-fancy
 - [asdf](https://asdf-vm.com) for language runtimes, plus the libraries needed to build Python
 - ripgrep, tree, curl, wget, jq, ping, dig, netcat, ssh, rsync, htop, vim and man
-- Claude Code and pi, installed into your home on first start so they can update themselves
+- Claude Code, Codex and pi, installed into your home on first start so they can update themselves
 
 The user is `dev` (UID 1000), with passwordless sudo and zsh as its shell.
 
@@ -76,7 +76,7 @@ The clone can't prompt for credentials, so a private repo needs them available i
 1. The entrypoint starts dockerd, unless a Docker socket is already mounted in or the container isn't allowed to run it.
 2. If `WORKBENCH_DOTFILES_REPO` is set, your dotfiles are cloned or updated, and their `install.sh` runs.
 3. Files from `/etc/skel` that aren't in `$HOME` yet are copied in, since a volume only gets them on its first mount.
-4. In the background: your dotfiles' `post-install.sh`, then Claude Code and pi if missing, then asdf plugins. Everything is logged to `~/.cache/workbench/setup.log`, and `~/.cache/workbench/setup-status` says `ok` or `failed` when it's done.
+4. In the background: your dotfiles' `post-install.sh`, then Claude Code, Codex and pi if missing, then asdf plugins. Everything is logged to `~/.cache/workbench/setup.log`, and `~/.cache/workbench/setup-status` says `ok` or `failed` when it's done.
 5. Your command runs. With no command, you get a login shell if a terminal is attached; otherwise the container stays up for `docker exec`.
 
 ## Where things live
@@ -86,6 +86,7 @@ The clone can't prompt for credentials, so a private repo needs them available i
 | Tools, prezto | the image | rebuild the image |
 | asdf plugins and runtimes | `~/.asdf` | `asdf install …` |
 | Claude Code | `~/.local/bin/claude` | updates itself, or `claude update` |
+| Codex | `~/.local/bin/codex`, `~/.codex/packages` | `codex update` |
 | pi | `~/.local/share/pi` | `pi update` |
 
 `pi` is a small launcher that runs pi on the image's own Node.js, so the `node` asdf picks for a project can't break it.
@@ -96,7 +97,7 @@ The clone can't prompt for credentials, so a private repo needs them available i
 |---|---|---|
 | `WORKBENCH_DOTFILES_REPO` | none | Dotfiles repo to clone and install on every start |
 | `WORKBENCH_START_DOCKERD` | `1` | `0` skips starting dockerd |
-| `WORKBENCH_INSTALL_AGENTS` | `1` | `0` skips installing Claude Code and pi |
+| `WORKBENCH_INSTALL_AGENTS` | `1` | `0` skips installing Claude Code, Codex and pi |
 | `WORKBENCH_ASDF_PLUGINS` | `python golang nodejs java` | asdf plugins to add; empty for none |
 
 Pinned versions (asdf, the Node.js for pi, prezto, diff-so-fancy) are build arguments at the top of `images/base/Dockerfile`.

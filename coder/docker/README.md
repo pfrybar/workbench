@@ -16,7 +16,7 @@ Provision Docker containers running the [workbench](https://github.com/pfrybar/w
 
 ### Workspace image
 
-The template uses `ghcr.io/pfrybar/workbench:base` by default, which the workbench repo's CI builds for amd64 and arm64. It includes Docker, git, zsh with prezto, tmux, Emacs, asdf, atuin, ripgrep and common command-line tools, and it installs Claude Code and pi into the home directory on first start. The [workbench README](https://github.com/pfrybar/workbench) has the full list.
+The template uses `ghcr.io/pfrybar/workbench:base` by default, which the workbench repo's CI builds for amd64 and arm64. It includes Docker, git, zsh with prezto, tmux, Emacs, asdf, atuin, ripgrep and common command-line tools, and it installs Claude Code, Codex and pi into the home directory on first start. The [workbench README](https://github.com/pfrybar/workbench) has the full list.
 
 The template pulls the image without credentials, so the GHCR package must be public. For a private package, add `registry_auth` for `ghcr.io` to the template's Docker provider.
 
@@ -75,7 +75,7 @@ This template provisions the following resources:
 - **Coder agent**, with dashboard metadata for the workspace's CPU, memory and home disk usage, and the host's CPU, memory, load and swap.
 - **Apps and scripts:** [code-server](https://registry.coder.com/modules/coder/code-server), git-clone, and a "Workbench setup" script.
 
-Only `/home/dev` persists. That's where your dotfiles clone, asdf runtimes, Claude Code, pi and shell history live. Everything else resets when the workspace restarts, including images and containers you create with Docker inside it.
+Only `/home/dev` persists. That's where your dotfiles clone, asdf runtimes, Claude Code, Codex, pi and shell history live. Everything else resets when the workspace restarts, including images and containers you create with Docker inside it.
 
 The template sets no Git environment variables, so Git identity and commit signing come from your dotfiles.
 
@@ -83,7 +83,7 @@ The template sets no Git environment variables, so Git identity and commit signi
 
 1. The image's entrypoint starts Docker inside the container.
 2. If `dotfiles_uri` is set, the image clones the repo into `~/.dotfiles` (or updates it) and runs its `install.sh`.
-3. In the background, the image runs the dotfiles' `post-install.sh`, installs Claude Code and pi if they're missing, and adds asdf plugins.
+3. In the background, the image runs the dotfiles' `post-install.sh`, installs Claude Code, Codex and pi if they're missing, and adds asdf plugins.
 4. The entrypoint starts Coder's agent. The container sets `command` rather than `entrypoint`, so the image's entrypoint always runs first.
 5. The "Workbench setup" script waits for step 3, prints that start's setup log in the dashboard, and holds logins until it's done. It fails if any step failed; the full log is in `~/.cache/workbench/setup.log`.
 

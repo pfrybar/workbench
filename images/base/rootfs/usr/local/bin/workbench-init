@@ -6,7 +6,7 @@
 #                                      start and pulled on later ones. Its install.sh
 #                                      runs right away, its post-install.sh (if it has
 #                                      one) in the background.
-#   WORKBENCH_INSTALL_AGENTS=0         don't install Claude Code and pi
+#   WORKBENCH_INSTALL_AGENTS=0         don't install Claude Code, Codex and pi
 #   WORKBENCH_ASDF_PLUGINS="a b ..."   asdf plugins to add (empty for none)
 #
 # Everything is logged to ~/.cache/workbench/setup.log. Once the background part
@@ -56,6 +56,14 @@ install_claude() {
   curl -fsSL https://claude.ai/install.sh | bash
 }
 
+install_codex() {
+  [[ -x $HOME/.local/bin/codex ]] && return 0
+  echo "Installing Codex"
+  # The installer offers to start Codex once it's done, and would wait for an
+  # answer if the container has a terminal.
+  curl -fsSL https://chatgpt.com/codex/install.sh | CODEX_NON_INTERACTIVE=1 sh
+}
+
 install_pi() {
   local prefix=$HOME/.local/share/pi
   [[ -e $prefix/bin/pi ]] && return 0
@@ -98,6 +106,7 @@ rsync -a --ignore-existing /etc/skel/ "$HOME"/
   fi
   if [[ ${WORKBENCH_INSTALL_AGENTS:-1} == 1 ]]; then
     install_claude || status=failed
+    install_codex || status=failed
     install_pi || status=failed
   fi
   add_asdf_plugins || status=failed

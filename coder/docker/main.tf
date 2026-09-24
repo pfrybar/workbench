@@ -134,8 +134,8 @@ module "git-clone" {
   url      = data.coder_parameter.git_repo.value
 }
 
-# Shows the image's startup log (dotfiles, Claude Code, pi, asdf plugins) in the
-# dashboard, and holds logins until it's finished.
+# Shows the image's startup log (dotfiles, Claude Code, Codex, pi, asdf
+# plugins) in the dashboard, and holds logins until it's finished.
 resource "coder_script" "workbench_setup" {
   agent_id           = coder_agent.main.id
   display_name       = "Workbench setup"
