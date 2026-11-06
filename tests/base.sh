@@ -34,7 +34,7 @@ check "user is dev (uid 1000, zsh, passwordless sudo)" run bash -c '
   [[ $(id -un):$(id -u) == dev:1000 && $(getent passwd dev | cut -d: -f7) == /usr/bin/zsh ]] &&
   sudo -n true'
 check "tools are on PATH" run bash -c '
-  for c in git zsh tmux emacs atuin rg tree diff-so-fancy asdf docker dockerd curl wget \
+  for c in git gh zsh tmux emacs atuin rg tree diff-so-fancy asdf docker dockerd curl wget \
            ping dig nc ssh rsync htop jq unzip xz zstd less man vim python3 make gcc; do
     command -v "$c" >/dev/null || { echo "missing: $c"; exit 1; }
   done'

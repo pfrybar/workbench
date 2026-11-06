@@ -28,18 +28,21 @@ RUN sed -i '\|^path-exclude=/usr/share/man/|d' /etc/dpkg/dpkg.cfg.d/excludes \
  && rm -f /usr/bin/man \
  && dpkg-divert --quiet --local --rename --remove /usr/bin/man
 
-# Extra package repositories: Docker CE and the latest git.
+# Extra package repositories: Docker CE, the latest git and the GitHub CLI.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl \
  && install -d -m 0755 /etc/apt/keyrings \
  && curl -fsSL -o /etc/apt/keyrings/docker.asc https://download.docker.com/linux/ubuntu/gpg \
  && curl -fsSL -o /etc/apt/keyrings/git-core.asc \
       "https://keyserver.ubuntu.com/pks/lookup?op=get&options=mr&search=0x${GIT_PPA_FINGERPRINT}" \
+ && curl -fsSL -o /etc/apt/keyrings/githubcli.gpg https://cli.github.com/packages/githubcli-archive-keyring.gpg \
  && . /etc/os-release \
  && echo "deb [signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" \
       > /etc/apt/sources.list.d/docker.list \
  && echo "deb [signed-by=/etc/apt/keyrings/git-core.asc] https://ppa.launchpadcontent.net/git-core/ppa/ubuntu ${VERSION_CODENAME} main" \
       > /etc/apt/sources.list.d/git-core.list \
+ && echo "deb [signed-by=/etc/apt/keyrings/githubcli.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list \
  && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update \
@@ -50,6 +53,8 @@ RUN apt-get update \
       iputils-ping bind9-dnsutils netcat-openbsd iproute2 \
       # Shell and editor
       git zsh tmux atuin emacs-nox \
+      # GitHub CLI: agents push to a fork and open pull requests with it
+      gh \
       # Docker, started by the entrypoint
       docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin \
       # Compilers, plus the libraries asdf needs to build Python
