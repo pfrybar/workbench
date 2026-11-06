@@ -16,7 +16,7 @@ Provision Docker containers running the [workbench](https://github.com/pfrybar/w
 
 ### Workspace image
 
-The template uses `ghcr.io/pfrybar/workbench:base` by default, which the workbench repo's CI builds for amd64 and arm64. It includes Docker, git, zsh with prezto, tmux, Emacs, asdf, atuin, ripgrep and common command-line tools, and it installs Claude Code, Codex and pi into the home directory on first start. The [workbench README](https://github.com/pfrybar/workbench) has the full list.
+The template uses `ghcr.io/pfrybar/workbench:base` by default, which the workbench repo's CI builds for amd64 and arm64. It includes Docker, git, the GitHub CLI, zsh with prezto, tmux, Emacs, asdf, atuin, ripgrep and common command-line tools, and it installs Claude Code, Codex and pi into the home directory on first start. The [workbench README](https://github.com/pfrybar/workbench) has the full list.
 
 The template pulls the image without credentials, so the GHCR package must be public. For a private package, add `registry_auth` for `ghcr.io` to the template's Docker provider.
 

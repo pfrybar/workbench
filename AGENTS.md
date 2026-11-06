@@ -51,4 +51,15 @@ CI (`.github/workflows/ci.yml`) runs shellcheck on the scripts, `terraform fmt -
 - Write an imperative subject line. Add a short body when the reason isn't obvious from the diff.
 - End the message with a `Co-Authored-By` trailer naming the agent and model, such as `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
 - Commits are SSH-signed. If signing fails, stop and report it instead of committing with `--no-gpg-sign`.
-- Don't push; the maintainer pushes.
+- Commit on a branch, never `main`.
+- You can't push to `origin`: your GitHub token belongs to an account without write access. Push to that account's fork and open a pull request; the maintainer reviews and merges it.
+
+  ```sh
+  # once per clone: add the fork (created if missing) as `fork`, and make
+  # pfrybar/workbench the repo that pull requests target
+  gh repo fork --remote --remote-name fork
+  gh repo set-default pfrybar/workbench
+
+  git push -u fork HEAD
+  gh pr create --fill
+  ```

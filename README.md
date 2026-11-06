@@ -8,7 +8,7 @@ The images contain tools, not personal settings. Shell, editor and git configura
 
 **`workbench:base`** is Ubuntu 26.04 with:
 
-- Docker (the daemon starts with the container) and git
+- Docker (the daemon starts with the container), git and the GitHub CLI (`gh`)
 - zsh with [prezto](https://github.com/sorin-ionescu/prezto), tmux, Emacs (terminal), atuin and diff-so-fancy
 - [asdf](https://asdf-vm.com) for language runtimes, plus the libraries needed to build Python
 - ripgrep, tree, curl, wget, jq, ping, dig, netcat, ssh, rsync, htop, vim and man
