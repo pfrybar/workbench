@@ -1,65 +1,68 @@
-# Agent guide
+# AGENTS.md
 
-Docker images for development environments. They're built for Coder workspaces but work with plain Docker too. `README.md` covers building, running and settings.
+A generic Docker image for development environments (`workbench:base`), and a
+Coder template that runs it. `README.md` is for people using the image.
 
 ## Layout
 
-- `images/base/Dockerfile`: the `workbench:base` image.
-- `images/base/rootfs/`: files copied into the image as-is, including the startup scripts in `usr/local/bin/`.
-- `docker-bake.hcl`: build definitions for `docker buildx bake`.
+- `images/base/Dockerfile`: the image.
 - `tests/base.sh`: smoke tests for the built image.
-- `coder/docker/`: a Coder template for the images (`main.tf`), and its `README.md`, which Coder shows alongside the template. Keep the README in step with `main.tf`, and use full URLs in it, since relative links don't work in Coder's dashboard.
+- `coder/docker/main.tf`: the Coder template. Coder shows
+  `coder/docker/README.md` next to it, so keep that README in step with
+  `main.tf` and use full URLs in it.
+- `.github/workflows/ci.yml`: lints, builds and tests on amd64 and arm64, and
+  publishes to GHCR from `main` only.
 
-## Principles
-
-- **Tools, not personal settings.** Anyone should be able to use the image. Personal configuration comes from the dotfiles repo in `WORKBENCH_DOTFILES_REPO`.
-- **Keep it lean.** Don't add packages or tools unless the maintainer asks for them.
-- **`$HOME` is a persistent volume.** Files the image puts in `/home/dev` only reach a volume on its first mount. Put defaults in `/etc/skel`; `workbench-init` copies in any that are missing on every start.
-- **Anything that updates itself lives in `$HOME`.** Coder recreates the container on every start, so anything outside `$HOME` resets to the image. That's why `workbench-init` installs Claude Code, Codex, pi and asdf plugins at start.
-- **Startup never breaks the container.** The entrypoint and `workbench-init` run on every start. Keep them idempotent, don't use `set -e`, and put slow or network work in the background, logged to `~/.cache/workbench/setup.log`.
-- **amd64 and arm64.** Use `TARGETARCH` for architecture-specific downloads, and update a download's version together with its checksums for both architectures.
-
-## Coder template
-
-- The container sets `command`, not `entrypoint`, so the image's entrypoint runs before Coder's agent.
-- The registry lookup and pull happen only while a workspace starts (`count = start_count`), so stopping a workspace never depends on the registry.
-- Settings the image reads at start go in the container's `env`. The agent's `env` only reaches agent sessions and scripts.
-- `coder_script` bodies run under the user's shell, which is zsh. Keep them POSIX `sh` and avoid names zsh reserves, such as `status`.
-- After editing, run `terraform fmt` and `terraform validate`. Neither checks the shell inside scripts, so test that separately.
-
-## Testing
-
-Each machine builds its own architecture:
+## Build and test
 
 ```sh
-docker buildx bake
-tests/base.sh             # quick checks, no network needed
-tests/base.sh --network   # also Docker-in-Docker and the first-start installs
+docker buildx bake          # builds workbench:base for this machine's architecture
+tests/base.sh               # quick checks, no network needed
+tests/base.sh --network     # also Docker-in-Docker and a tool installed by mise
+shellcheck tests/base.sh
+```
+
+Check the template after changing it (terraform runs in Docker, so it needn't
+be installed):
+
+```sh
+docker run --rm -v "$PWD/coder/docker:/w:ro" -w /w hashicorp/terraform fmt -check
+docker run --rm -v "$PWD/coder/docker:/w:ro" --entrypoint sh hashicorp/terraform -c \
+  'cp -r /w /tmp/w && cd /tmp/w && terraform init -backend=false -input=false >/dev/null && terraform validate'
 ```
 
 Add a check to `tests/base.sh` for new behavior.
 
-CI (`.github/workflows/ci.yml`) runs shellcheck on the scripts, `terraform fmt -check` and `terraform validate` on the template, and `tests/base.sh --network` on native amd64 and arm64 runners. Only builds that pass are published, and only from `main`.
+## Rules
 
-## Style
+- The image is generic: base tools, mise and Paseo. Nothing personal; users
+  install their own tools and dotfiles with mise.
+- The image starts nothing. The Coder template starts dockerd and Paseo.
+- Don't add packages unless the maintainer asks.
+- Build for amd64 and arm64; use `TARGETARCH` for downloads that differ.
+- The Node in `/opt/workbench/node` only runs Paseo. Keep it off `PATH`.
+- In the template, set the container's `command`, not `entrypoint`, and create
+  registry and image resources only while a workspace starts
+  (`count = data.coder_workspace.me.start_count`).
+- `coder_script` bodies run under the user's shell (zsh): keep them POSIX `sh`
+  and avoid names zsh reserves, such as `status`.
+- Shell scripts use 2-space indentation and start with a comment saying what
+  they do. Comments explain why, not what.
 
-- Shell scripts use 2-space indentation and start with a comment saying what the script does.
-- Comments explain why, not what.
+## Commits and pull requests
 
-## Commits
-
-- Write an imperative subject line. Add a short body when the reason isn't obvious from the diff.
-- End the message with a `Co-Authored-By` trailer naming the agent and model, such as `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
-- Commits are SSH-signed. If signing fails, stop and report it instead of committing with `--no-gpg-sign`.
-- Commit on a branch, never `main`.
-- You can't push to `origin`: your GitHub token belongs to an account without write access. Push to that account's fork and open a pull request; the maintainer reviews and merges it.
+- Commit on a branch, never `main`. Write an imperative subject line; add a
+  short body when the reason isn't obvious from the diff.
+- End the message with a `Co-Authored-By` trailer naming the agent and model,
+  such as `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
+- Commits are SSH-signed. If signing fails, stop and report it; don't use
+  `--no-gpg-sign`.
+- You can't push to `origin`. Push to your account's fork and open a pull
+  request; the maintainer reviews and merges it:
 
   ```sh
-  # once per clone: add the fork (created if missing) as `fork`, and make
-  # pfrybar/workbench the repo that pull requests target
-  gh repo fork --remote --remote-name fork
-  gh repo set-default pfrybar/workbench
-
+  gh repo fork --remote --remote-name fork   # once per clone
+  gh repo set-default pfrybar/workbench      # once per clone
   git push -u fork HEAD
   gh pr create --fill
   ```

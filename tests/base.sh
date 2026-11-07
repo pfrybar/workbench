@@ -2,7 +2,7 @@
 # Smoke tests for workbench:base. Build first, then:
 #
 #   tests/base.sh             quick checks, no network needed
-#   tests/base.sh --network   also Docker-in-Docker and the first-start installs
+#   tests/base.sh --network   also Docker-in-Docker and a tool installed by mise
 #
 # The checks hand their commands to bash -c in single quotes on purpose: they
 # expand inside the container, not here.
@@ -24,63 +24,59 @@ check() {
   fi
 }
 
-# A throwaway container with no dockerd and no network installs.
+# A throwaway container.
 run() {
-  docker run --rm -e WORKBENCH_START_DOCKERD=0 -e WORKBENCH_INSTALL_AGENTS=0 \
-    -e WORKBENCH_ASDF_PLUGINS= "$IMAGE" "$@"
+  docker run --rm "$IMAGE" "$@"
+}
+
+# The image starts nothing itself: Coder starts dockerd and Paseo.
+starts_nothing() {
+  local id result=0
+  id=$(docker run -d "$IMAGE") || return 1
+  docker exec "$id" bash -c '
+    [[ $(ps -o comm= -p 1) == tini ]] || { echo "PID 1 is not tini"; exit 1; }
+    ! pgrep -x dockerd || { echo "dockerd is running"; exit 1; }
+    ! pgrep -x node || { echo "Paseo (node) is running"; exit 1; }' || result=1
+  docker rm -f "$id" >/dev/null
+  return "$result"
 }
 
 check "user is dev (uid 1000, zsh, passwordless sudo)" run bash -c '
   [[ $(id -un):$(id -u) == dev:1000 && $(getent passwd dev | cut -d: -f7) == /usr/bin/zsh ]] &&
   sudo -n true'
 check "tools are on PATH" run bash -c '
-  for c in git gh zsh tmux emacs atuin rg tree diff-so-fancy asdf docker dockerd curl wget \
-           ping dig nc ssh rsync htop jq unzip xz zstd less man vim python3 make gcc; do
+  for c in git gh zsh tmux emacs vim mise paseo docker dockerd curl wget ping dig nc \
+           ssh rsync htop jq rg tree unzip xz zstd less man python3 make gcc; do
     command -v "$c" >/dev/null || { echo "missing: $c"; exit 1; }
   done'
 check "UTF-8 locale" run bash -c '[[ $(locale charmap) == UTF-8 ]]'
 check "man pages" run man -w git
 check "tmux-256color terminfo" run infocmp tmux-256color
 check "emacs runs" run emacs --batch --eval '(kill-emacs 0)'
-check "prezto loads" run zsh -c 'source /usr/local/share/zsh/prezto/init.zsh'
-check "diff-so-fancy runs" run bash -c '
-  printf "%s\n" "--- a/f" "+++ b/f" "@@ -1 +1 @@" "-old" "+new" | diff-so-fancy'
-check "asdf runs" run asdf version
-check "pi's Node is >= 22.19" run /opt/workbench/node/bin/node -e '
-  const [major, minor] = process.versions.node.split(".").map(Number);
-  process.exit(major > 22 || (major === 22 && minor >= 19) ? 0 : 1)'
-check "home is seeded, no zsh new-user wizard" run bash -c '
-  [[ -f ~/.zshrc ]] && ! zsh -i -c exit </dev/null 2>&1 | grep -q "new users"'
-
-check ".zprezto in home links to the image's prezto" run zsh -c '
-  [[ -L ~/.zprezto ]] && source ~/.zprezto/init.zsh'
-check "dotfiles: clone, install.sh, then post-install.sh" run bash -c '
-  wait_for_setup() {
-    for _ in {1..60}; do [[ -f ~/.cache/workbench/setup-status ]] && return; sleep 0.5; done
-  }
-  wait_for_setup
-  git init -q /tmp/dotfiles && cd /tmp/dotfiles &&
-    printf "#!/bin/sh\ntouch ~/.installed\n" >install.sh &&
-    printf "#!/bin/sh\ntouch ~/.post-installed\n" >post-install.sh &&
-    chmod +x install.sh post-install.sh && git add . &&
-    git -c user.name=test -c user.email=test@example.invalid commit -qm fixture || exit 1
-  cd ~ && WORKBENCH_DOTFILES_REPO=/tmp/dotfiles workbench-init >/dev/null && wait_for_setup
-  [[ -d ~/.dotfiles/.git && -f ~/.installed && -f ~/.post-installed &&
-     $(cat ~/.cache/workbench/setup-status) == ok ]]'
+check "default command keeps the container up and starts nothing" starts_nothing
+check "mise's shims are on PATH" run bash -c '[[ ":$PATH:" == *":$HOME/.local/share/mise/shims:"* ]]'
+check "the image's Node is not on PATH" run bash -c '! command -v node'
+check "paseo runs on the image's Node, whatever node is on PATH" run bash -c '
+  mkdir -p ~/.local/bin && printf "#!/bin/sh\nexit 1\n" >~/.local/bin/node &&
+  chmod +x ~/.local/bin/node && paseo --version'
+check "mise bootstrap applies a user's repo" run bash -c '
+  git init -q /tmp/repo && cd /tmp/repo && mkdir home &&
+  printf "from the repo\n" >home/dot-testrc &&
+  printf "%s\n" "[dotfiles.\"~\"]" "source = \"~/.dotfiles/home\"" "mode = \"copy\"" \
+    "dot_prefix = true" "[tasks.bootstrap]" "run = \"touch ~/.bootstrapped\"" >config.toml &&
+  git add . && git -c user.name=test -c user.email=test@example.invalid commit -qm fixture || exit 1
+  cd ~ && mise bootstrap --from /tmp/repo --from-dir ~/.dotfiles --config-dir . --yes >/dev/null || exit 1
+  [[ $(cat ~/.testrc) == "from the repo" && -f ~/.bootstrapped && ~/.config/mise -ef ~/.dotfiles ]]'
 
 if [[ ${1:-} == --network ]]; then
-  check "dockerd starts under --privileged" docker run --rm --privileged -v /var/lib/docker \
-    -e WORKBENCH_INSTALL_AGENTS=0 -e WORKBENCH_ASDF_PLUGINS= "$IMAGE" \
-    docker info --format '{{.ServerVersion}}'
-  check "first start installs Claude Code, Codex, pi and asdf plugins; pi updates itself" \
-    docker run --rm -e WORKBENCH_START_DOCKERD=0 "$IMAGE" bash -c '
-      for _ in {1..300}; do [[ -f ~/.cache/workbench/setup-status ]] && break; sleep 1; done
-      cat ~/.cache/workbench/setup.log
-      [[ $(cat ~/.cache/workbench/setup-status) == ok ]] || exit 1
-      claude --version && codex --version && pi --version && asdf plugin list || exit 1
-      # Neither pi nor `pi update` may depend on whichever node comes first on PATH.
-      printf "#!/bin/sh\nexit 1\n" >~/.local/bin/node && chmod +x ~/.local/bin/node
-      pi --version && pi update --self --force && pi --version'
+  check "Docker-in-Docker under --privileged, once dockerd is started" \
+    docker run --rm --privileged -v /var/lib/docker "$IMAGE" bash -c '
+      sudo /etc/init.d/docker start >/dev/null || exit 1
+      for _ in {1..60}; do docker info >/dev/null 2>&1 && break; sleep 0.5; done
+      docker run --rm hello-world'
+  # A pinned version, so mise downloads the release without asking GitHub's API.
+  check "mise installs a tool, and its shim works without a shell" run bash -c '
+    mise use --global --yes yq@4.44.3 >/dev/null && yq --version'
 fi
 
 if ((failures)); then
