@@ -7,15 +7,8 @@ ARG TARGETARCH
 ARG USERNAME=dev
 ARG USER_UID=1000
 
-# Pinned downloads: bump each version together with its checksums.
-ARG ASDF_VERSION=0.20.0
-ARG ASDF_SHA256_AMD64=9c25e1af7cc4c9d59ff3736eba14fd000480c32929258f80d8c5a8b290ebee14
-ARG ASDF_SHA256_ARM64=bbc1889886a9826ce3f57f56e4bae575767a4af3d35d649d62116ee14334e59a
-ARG DIFF_SO_FANCY_VERSION=1.4.12
-ARG DIFF_SO_FANCY_SHA256=fc94b757a65d39792727ec18aff6a33d7f16506842c48b37b662b8222b88eb51
-# Checked against nodejs.org's SHASUMS256.txt at build time.
 ARG NODE_VERSION=24.21.0
-ARG PREZTO_COMMIT=cff2d01871425b1b80710f8ec6a475c5a53145b4
+ARG PASEO_VERSION=0.15.3
 # Signing key of ppa:git-core/ppa, as published by Launchpad.
 ARG GIT_PPA_FINGERPRINT=F911AB184317630C59970973E363C90F8F1B6217
 
@@ -52,37 +45,20 @@ RUN apt-get update \
       wget rsync openssh-client unzip xz-utils zstd \
       iputils-ping bind9-dnsutils netcat-openbsd iproute2 \
       # Shell and editor
-      git zsh tmux atuin emacs-nox \
-      # GitHub CLI: agents push to a fork and open pull requests with it
-      gh \
-      # Docker, started by the entrypoint
-      docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin \
-      # Compilers, plus the libraries asdf needs to build Python
+      git zsh tmux emacs-nox \
+      # GitHub CLI, Docker
+      gh docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin \
+      # Compilers
       build-essential pkgconf python3 \
-      libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncurses-dev \
-      libffi-dev liblzma-dev libgdbm-dev libgdbm-compat-dev uuid-dev libzstd-dev \
  && rm -rf /var/lib/apt/lists/* \
  && locale-gen en_US.UTF-8
 
-# asdf manages language runtimes. Its plugins and installed versions live in $HOME.
-RUN case "$TARGETARCH" in \
-      amd64) sum=$ASDF_SHA256_AMD64 ;; \
-      arm64) sum=$ASDF_SHA256_ARM64 ;; \
-      *) echo "unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
-    esac \
- && curl -fsSL -o /tmp/asdf.tar.gz \
-      "https://github.com/asdf-vm/asdf/releases/download/v${ASDF_VERSION}/asdf-v${ASDF_VERSION}-linux-${TARGETARCH}.tar.gz" \
- && echo "${sum}  /tmp/asdf.tar.gz" | sha256sum -c - \
- && tar -xzf /tmp/asdf.tar.gz -C /usr/local/bin asdf \
- && rm /tmp/asdf.tar.gz
+COPY --from=ghcr.io/jdx/mise:2026.11.2 \
+    /usr/local/bin/mise /usr/local/bin/mise
 
-RUN curl -fsSL -o /usr/local/bin/diff-so-fancy \
-      "https://github.com/so-fancy/diff-so-fancy/releases/download/v${DIFF_SO_FANCY_VERSION}/diff-so-fancy" \
- && echo "${DIFF_SO_FANCY_SHA256}  /usr/local/bin/diff-so-fancy" | sha256sum -c - \
- && chmod 755 /usr/local/bin/diff-so-fancy
+RUN mise --version
 
-# A Node.js just for running pi. It stays off PATH so it never competes with
-# the versions asdf manages.
+# A Node.js just for running paseo. It stays off PATH so it never competes with other Node versions.
 RUN case "$TARGETARCH" in amd64) arch=x64 ;; arm64) arch=arm64 ;; esac \
  && tarball="node-v${NODE_VERSION}-linux-${arch}.tar.xz" \
  && cd /tmp \
@@ -92,13 +68,23 @@ RUN case "$TARGETARCH" in amd64) arch=x64 ;; arm64) arch=arm64 ;; esac \
  && tar -xJf "$tarball" -C /opt/workbench/node --strip-components=1 \
  && rm -rf "$tarball" /opt/workbench/node/include /opt/workbench/node/share/doc
 
-# prezto, pinned. Dotfiles load it from here when there's no ~/.zprezto.
-RUN git clone --quiet https://github.com/sorin-ionescu/prezto.git /usr/local/share/zsh/prezto \
- && git -C /usr/local/share/zsh/prezto -c advice.detachedHead=false checkout --quiet "$PREZTO_COMMIT" \
- && git -C /usr/local/share/zsh/prezto submodule --quiet update --init --recursive \
- && find /usr/local/share/zsh/prezto -name .git -prune -exec rm -rf {} +
+RUN PATH="/opt/workbench/node/bin:$PATH" \
+    /opt/workbench/node/bin/npm install \
+      --global \
+      --prefix /opt/workbench/paseo \
+      --no-audit \
+      --no-fund \
+      "@getpaseo/cli@${PASEO_VERSION}"
 
-COPY rootfs/ /
+# Launch Paseo using the image's dedicated Node runtime,
+# independently of mise-managed project Node versions.
+RUN printf '%s\n' \
+      '#!/bin/sh' \
+      'exec /opt/workbench/node/bin/node /opt/workbench/paseo/lib/node_modules/@getpaseo/cli/bin/paseo "$@"' \
+      > /usr/local/bin/paseo \
+ && chmod 755 /usr/local/bin/paseo
+
+RUN paseo --version
 
 # Replace the image's `ubuntu` user (also UID 1000) with ours.
 RUN userdel -r ubuntu \
@@ -109,9 +95,9 @@ RUN userdel -r ubuntu \
 ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8 \
-    ASDF_DATA_DIR=/home/${USERNAME}/.asdf \
-    PATH=/home/${USERNAME}/.asdf/shims:/home/${USERNAME}/.local/bin:${PATH}
+    PATH=/home/${USERNAME}/.local/share/mise/shims:/home/${USERNAME}/.local/bin:${PATH}:/opt/workbench/node/bin
 
 USER ${USERNAME}
 WORKDIR /home/${USERNAME}
-ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/workbench-entrypoint"]
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["sleep", "infinity"]
