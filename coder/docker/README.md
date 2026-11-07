@@ -69,7 +69,7 @@ When creating a workspace, you can set:
 
 This template provisions the following resources:
 
-- **Docker image**, pulled from the registry when a workspace starts. A start pulls again only if the tag has moved to a new build. Images stay on the host after workspaces stop, so prune old builds now and then.
+- **Docker image**, pulled by digest when a workspace starts. Each start looks up the digest the tag points to and pulls that build if the host doesn't have it yet, so a new build reaches a workspace on its next start. Images stay on the host after workspaces stop, so prune old builds now and then.
 - **Docker container (ephemeral)**, recreated on every start, running under sysbox on the `coder-workspaces` network.
 - **Docker volume (persistent)** at `/home/dev`.
 - **Coder agent**, with dashboard metadata for the workspace's CPU, memory and home disk usage, and the host's CPU, memory, load and swap.
