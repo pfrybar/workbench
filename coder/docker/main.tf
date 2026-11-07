@@ -27,7 +27,7 @@ variable "cert_path" {
 
 variable "image" {
   default     = "ghcr.io/pfrybar/workbench:base"
-  description = "Workspace image in a registry. A workspace start pulls a new build whenever the tag has moved."
+  description = "Workspace image in a registry. Each workspace start looks up the tag's current digest and pulls that build if the host doesn't have it."
   type        = string
 }
 
@@ -164,18 +164,24 @@ module "code-server" {
   order    = 1
 }
 
-# Looks up the tag's current digest when a workspace starts, so a new build of
-# the tag gets pulled. Only on start: stopping a workspace doesn't need the
-# registry.
+# Looks up the tag's current digest when a workspace starts. Only on start:
+# stopping a workspace doesn't need the registry.
 data "docker_registry_image" "workbench" {
   count = data.coder_workspace.me.start_count
   name  = var.image
 }
 
+locals {
+  # var.image without its tag or digest, e.g. ghcr.io/pfrybar/workbench.
+  image_repository = replace(replace(var.image, "/@.*$/", ""), "/:[^:/]+$/", "")
+}
+
 resource "docker_image" "workbench" {
-  count         = data.coder_workspace.me.start_count
-  name          = data.docker_registry_image.workbench[0].name
-  pull_triggers = [data.docker_registry_image.workbench[0].sha256_digest]
+  count = data.coder_workspace.me.start_count
+  # By digest, not tag: the provider uses any local image with the same name
+  # without pulling, so a tag would stay on whichever build the host pulled
+  # first. A new build has a digest the host hasn't seen, so it gets pulled.
+  name = "${local.image_repository}@${data.docker_registry_image.workbench[0].sha256_digest}"
   # Other workspaces may still be running the previous build.
   keep_locally = true
 }
