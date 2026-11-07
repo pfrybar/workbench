@@ -58,7 +58,8 @@ COPY --from=ghcr.io/jdx/mise:2026.11.2 \
 
 RUN mise --version
 
-# A Node.js just for running paseo. It stays off PATH so it never competes with other Node versions.
+# A Node.js just for running Paseo. It stays off PATH: users get their own Node
+# from mise, and Paseo's launcher calls this one by its full path.
 RUN case "$TARGETARCH" in amd64) arch=x64 ;; arm64) arch=arm64 ;; esac \
  && tarball="node-v${NODE_VERSION}-linux-${arch}.tar.xz" \
  && cd /tmp \
@@ -95,7 +96,7 @@ RUN userdel -r ubuntu \
 ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8 \
-    PATH=/home/${USERNAME}/.local/share/mise/shims:/home/${USERNAME}/.local/bin:${PATH}:/opt/workbench/node/bin
+    PATH=/home/${USERNAME}/.local/share/mise/shims:/home/${USERNAME}/.local/bin:${PATH}
 
 USER ${USERNAME}
 WORKDIR /home/${USERNAME}
