@@ -229,6 +229,24 @@ resource "coder_script" "setup" {
     # Paseo reads its settings from ~/.paseo/config.json, which a Coder secret
     # can provide: Coder writes secret files before this script runs.
     if [ "$WORKBENCH_PASEO" = true ]; then
+      # This workspace's own setup, e.g. secrets its agents need: a script in
+      # its home, sourced on every start before Paseo, so the variables it
+      # sets reach Paseo and the agents it starts. Its syntax is checked
+      # first, with the shell this runs in, so a broken script is skipped
+      # instead of stopping this one.
+      init="$HOME/.config/workbench/init.sh"
+      if [ -f "$init" ]; then
+        if "$${ZSH_NAME:-sh}" -n "$init"; then
+          echo "Running $init"
+          set -a
+          . "$init" || result=1
+          set +a
+        else
+          echo "$init has a syntax error, so it was skipped." >&2
+          result=1
+        fi
+      fi
+
       if paseo daemon start; then
         # The pairing link goes on the "Pair Paseo" app's page, which has a
         # Copy button and a QR code for phones. The link alone lets anyone
