@@ -25,24 +25,13 @@ env:
 
 jobs:
   check:
-    name: Lint scripts and the Coder template
+    name: Lint scripts
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
       - name: shellcheck
         run: shellcheck tests/base.sh
-
-      - uses: hashicorp/setup-terraform@v4
-
-      # validate needs the providers and modules, which init downloads. There is
-      # no state involved, so no backend.
-      - name: Terraform fmt and validate
-        working-directory: coder/docker
-        run: |
-          terraform fmt -check
-          terraform init -backend=false -input=false
-          terraform validate
 
   # One build per architecture, on a runner of that architecture: emulating
   # arm64 with QEMU would take several times as long. Each leg tests the image

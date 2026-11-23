@@ -1,17 +1,12 @@
 # AGENTS.md
 
-A generic Docker image for development environments (`workbench:base`), and a
-Coder template that runs it. `README.md` is for people using the image.
+A generic Docker image for development environments. The README is for people
+using the image.
 
 ## Layout
 
 - `images/base/Dockerfile`: the image.
-- `images/base/paseo-pairing-page/page.mjs`: the Paseo pairing page, and
-  the server the template runs for it (`workbench-paseo-pairing-page`).
 - `tests/base.sh`: smoke tests for the built image.
-- `coder/docker/main.tf`: the Coder template. Coder shows
-  `coder/docker/README.md` next to it, so keep that README in step with
-  `main.tf` and use full URLs in it.
 - `.github/workflows/ci.yml`: lints, builds and tests on amd64 and arm64, and
   publishes to GHCR from `main` only.
 
@@ -24,30 +19,15 @@ tests/base.sh --network     # also Docker-in-Docker and a tool installed by mise
 shellcheck tests/base.sh
 ```
 
-Check the template after changing it (terraform runs in Docker, so it needn't
-be installed):
-
-```sh
-docker run --rm -v "$PWD/coder/docker:/w:ro" -w /w hashicorp/terraform fmt -check
-docker run --rm -v "$PWD/coder/docker:/w:ro" --entrypoint sh hashicorp/terraform -c \
-  'cp -r /w /tmp/w && cd /tmp/w && terraform init -backend=false -input=false >/dev/null && terraform validate'
-```
-
 Add a check to `tests/base.sh` for new behavior.
 
 ## Rules
 
-- The image is generic: base tools, mise and Paseo. Nothing personal; users
-  install their own tools and dotfiles with mise.
-- The image starts nothing. The Coder template starts dockerd and Paseo.
+- The image is generic: base tools and mise. Users install their tools and
+  dotfiles with mise.
+- The image starts no services.
 - Don't add packages unless the maintainer asks.
-- Build for amd64 and arm64; use `TARGETARCH` for downloads that differ.
-- The Node in `/opt/workbench/node` only runs Paseo. Keep it off `PATH`.
-- In the template, set the container's `command`, not `entrypoint`, and create
-  registry and image resources only while a workspace starts
-  (`count = data.coder_workspace.me.start_count`).
-- `coder_script` bodies run under the user's shell (zsh): keep them POSIX `sh`
-  and avoid names zsh reserves, such as `status`.
+- Build for amd64 and arm64.
 - Shell scripts use 2-space indentation and start with a comment saying what
   they do. Comments explain why, not what.
 
